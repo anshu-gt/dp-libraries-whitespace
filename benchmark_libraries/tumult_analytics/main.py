@@ -39,7 +39,6 @@ epsilons = list(np.round(np.arange(0.01, 0.1, 0.01), 2)) + \
 # [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
 
-# /Users/anshusingh/DPPCC/whitespace/differential_privacy/datasets/synthetic/skew_normal_data/dataset_1.csv
 #------------#
 # QUERIES    #
 #------------#
@@ -132,7 +131,7 @@ for query in QUERIES:
                 print("time_list: ", time_list)
                 # compute errors
 
-                # TODO outputs needs to be updated
+                # TODO outputs need to be updated
                 err.append(true_value - private_value)
                 relative_err.append(
                     abs((true_value - private_value)/true_value))
