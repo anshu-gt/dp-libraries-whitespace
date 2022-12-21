@@ -15,11 +15,11 @@ import pandas as pd
 # ### Funciton to be used:  skewnorm.rvs(a => for skewness, loc=> for location, scale => for scale, size => datset size)
 
 
-def dataset_generation(a, scale, size, f):
-    data_points = skewnorm.rvs(a=a, loc=0, scale=scale, size=size)
+def dataset_generation(skew, scale, size, f):
+    data_points = skewnorm.rvs(a=skew, loc=0, scale=scale, size=size)
     df = pd.DataFrame()
     df["values"] = [round(point, 2) for point in data_points]
-    df.to_csv("skew_normal_data/dataset_{}.csv".format(f), index=False)
+    df.to_csv(f"skew_normal_data/synthetic_{size}_{scale}_{skew}.csv", index=False)
 
     # for i in data:
     #     guestFile = open('.\skew_normal_data\dataset_{}.csv'.format(f), "a")
