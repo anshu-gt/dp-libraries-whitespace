@@ -33,7 +33,7 @@ def save_synthetic_dataset_ouput(lib_name, query, epsilon, filename, error, rela
     data_feats = filename.split("_")
     out["dataset_size"] = data_feats[1]
     out["dataset_scale"] = data_feats[2]
-    out["dataset_skew"] = strip_end(data_feats[3], '.csv')
+    out["dataset_skew"] = strip_end(data_feats[3], ".csv")
 
     out["mean_error"] = round(np.mean(error), rounding_val)
     out["stdev_error"] = round(np.std(error), rounding_val)
@@ -49,10 +49,10 @@ def save_synthetic_dataset_ouput(lib_name, query, epsilon, filename, error, rela
 
     df = pd.DataFrame([out])
 
-    directory = f"outputs/synthetic/{lib_name.lower()}/"
+    directory = f"outputs/synthetic/{lib_name.lower()}/size_{out['dataset_size']}/"
     if not os.path.exists(directory):
         os.makedirs(directory)
 
-    output_path = directory + f'{query.lower()}.csv'
-    df.to_csv(output_path, mode='a', header=not os.path.exists(
+    output_path = directory + f"{query.lower()}.csv"
+    df.to_csv(output_path, mode="a", header=not os.path.exists(
         output_path), index=False)

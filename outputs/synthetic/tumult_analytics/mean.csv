@@ -1,3 +1,0 @@
-,epsilon,dataset_size,dataset_scale,dataset_skew,mean_error,stdev_error,mean_relative_error,stdev_relative_error,mean_scaled_error,stdev_scaled_error,mean_time_used,mean_memory_used
-0,0.01,1000,50,0,43.46,33.76,394.74,306.66,0.04,0.03,7.6,129726873.6
-0,0.02,1000,50,0,15.29,13.56,138.93,123.21,0.02,0.01,4.41,130387148.8
