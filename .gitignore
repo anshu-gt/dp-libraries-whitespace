@@ -2,5 +2,6 @@
 .DS_Store
 datasets/
 outputs/
+spark-warehouse/
 */__pycache__/
 *.pyc

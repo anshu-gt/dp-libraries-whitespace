@@ -3,6 +3,8 @@ import os
 import pandas as pd
 import numpy as np
 
+from commons.stats_vals import EPSILON_VALUES
+
 
 # def variance(data, ddof=0):
 #     n = len(data)
@@ -15,6 +17,19 @@ import numpy as np
 #     std_dev = math.sqrt(var)
 #     return std_dev
 
+def update_epsilon_values(output_file):
+    """
+    """
+    out_df = pd.read_csv(output_file)
+    last_epsilon = out_df["epsilon"].iloc[-1]
+
+    index = EPSILON_VALUES.index(last_epsilon)
+
+    try:
+        return EPSILON_VALUES[index+1:]
+    except:
+        return -1
+
 
 def strip_end(text, suffix):
     if suffix and text.endswith(suffix):
@@ -22,14 +37,16 @@ def strip_end(text, suffix):
     return text
 
 
-def save_synthetic_dataset_ouput(lib_name, query, epsilon, filename, error, relative_errors, scaled_errors, time_used, memory_used):
+def save_synthetic_data_query_ouput(lib_name, query, epsilon, filename, error, relative_errors, scaled_errors, time_used, memory_used):
+    """
+    """
 
     rounding_val = 2
     out = {}
 
     out["epsilon"] = epsilon
 
-    # synthetic_<size>_<scale>_<skew>.csv
+    # data_<size>_<scale>_<skew>.csv
     data_feats = filename.split("_")
     out["dataset_size"] = data_feats[1]
     out["dataset_scale"] = data_feats[2]
@@ -56,3 +73,5 @@ def save_synthetic_dataset_ouput(lib_name, query, epsilon, filename, error, rela
     output_path = directory + f"{query.lower()}.csv"
     df.to_csv(output_path, mode="a", header=not os.path.exists(
         output_path), index=False)
+
+    print(f"Saved results for epsilon: {epsilon}")

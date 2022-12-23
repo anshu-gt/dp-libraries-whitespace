@@ -2,7 +2,7 @@
 import os
 import psutil
 import time
-import numpy as np
+from tqdm import tqdm
 
 from tmlt.analytics.query_builder import QueryBuilder
 from tmlt.analytics.privacy_budget import PureDPBudget
@@ -11,19 +11,13 @@ from tmlt.analytics.protected_change import AddOneRow
 
 from pyspark.sql import SparkSession
 
-from commons.utils import save_synthetic_dataset_ouput
+from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
+from commons.stats_vals import BASE_PATH, EPSILON_VALUES, TUMULT_ANALYTICS, MEAN, VARIANCE, COUNT, SUM
 
 #-----------#
 # Constants #
 #-----------#
-
-LIB_NAME = "TUMULT_ANALYTICS"
-
-# queries to experiment
-MEAN_QUERY = "MEAN"
-COUNT_QUERY = "COUNT"
-SUM_QUERY = "SUM"
-VARIANCE_QUERY = "VARIANCE"
+LIB_NAME = TUMULT_ANALYTICS
 
 # constants
 SOURCE_ID = "synthetic_data"
@@ -76,7 +70,7 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
             #------------#
             # ITERATIONS #
             #------------#
-            for _ in range(per_epsilon_iterations):
+            for _ in tqdm(range(per_epsilon_iterations)):
 
                 process = psutil.Process(os.getpid())
 
@@ -138,8 +132,8 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
                 eps_relative_errors.append(error/abs(true_value))
                 eps_scaled_errors.append(error/num_rows)
 
-            save_synthetic_dataset_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
-                                         eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
+            save_synthetic_data_query_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
+                                            eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
 
 
 if __name__ == "__main__":
@@ -147,23 +141,31 @@ if __name__ == "__main__":
     #----------------#
     # Configurations #
     #----------------#
-    experimental_query = MEAN_QUERY
+    experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
 
-    # synthetic dataset naming convention: synthetic_<size>_<scale>_<skew>.csv
-    # real dataset naming convention: real_<name>.csv
-    dataset_path = "/Users/anshusingh/DPPCC/whitespace/differential_privacy/datasets/synthetic_data/size_1000/"
+    dataset_size = 1000  # {}
+    dataset_path = BASE_PATH + "datasets/synthetic_data/size_1000/"
     column_name = "values"
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 2  # 100
+    per_epsilon_iterations = 100  # [100, 500]
 
-    epsilon_values = list(np.round(np.arange(0.01, 0.1, 0.01), 2)) + \
-        list(np.round(np.arange(0.1, 1, 0.1), 2)) + \
-        list(np.arange(1, 11, 1))
-    # [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09]
-    # [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-    # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    epsilon_values = EPSILON_VALUES
 
-    run_tmlt_analytics_query(experimental_query, epsilon_values,
-                             per_epsilon_iterations, dataset_path, column_name)
+    # test whether to resume from the failed epsilon values' run
+    output_file = f"outputs/synthetic/{LIB_NAME.lower()}/size_{dataset_size}/{experimental_query}.csv"
+    if os.path.exists(output_file):
+        epsilon_values = update_epsilon_values(output_file)
+
+    if epsilon_values != -1:
+
+        print("Library: ", LIB_NAME)
+        print("Query: ", experimental_query)
+        print("Iterations: ", per_epsilon_iterations)
+        print("Dataset size: ", dataset_size)
+        print("Dataset path: ", dataset_path)
+        print("Epsilon Values: ", epsilon_values)
+
+        run_tmlt_analytics_query(experimental_query, epsilon_values,
+                                 per_epsilon_iterations, dataset_path, column_name)
