@@ -42,6 +42,9 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
     # DATASETS   #
     #------------#
     for filename in os.listdir(data_path):
+        print("#"*10)
+        print("Filename: ", filename)
+        print("#"*10)
         if not filename.endswith(".csv"):
             continue
 
@@ -124,6 +127,10 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
                 # print("private_value: ", private_value)
                 # print("memory_list: ", memory_list)
                 # print("time_list: ", time_list)
+                print("min_value: ", min_value)
+                print("max_value: ", max_value)
+                print("true_value:", true_value)
+                print("private_value:", private_value)
 
                 # compute errors
                 error = abs(true_value - private_value)
@@ -143,13 +150,13 @@ if __name__ == "__main__":
     #----------------#
     experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
 
-    dataset_size = 1000  # {}
-    dataset_path = BASE_PATH + "datasets/synthetic_data/size_1000/"
+    dataset_size = 10000000  # {}
+    dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
     column_name = "values"
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 100  # [100, 500]
+    per_epsilon_iterations = 3  # [100, 500]
 
     epsilon_values = EPSILON_VALUES
 

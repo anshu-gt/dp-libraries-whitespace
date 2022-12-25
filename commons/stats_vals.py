@@ -1,12 +1,14 @@
 
 TUMULT_ANALYTICS = "TUMULT_ANALYTICS"
+OPENDP = "OPENDP"
+DIFFPRIVLIB = "DIFFPRIVLIB"
+PIPELINEDP = "PIPELINEDP"
 
 # queries to experiment
 MEAN = "MEAN"
 COUNT = "COUNT"
 SUM = "SUM"
 VARIANCE = "VARIANCE"
-
 
 BASE_PATH = "/Users/anshusingh/DPPCC/whitespace/differential_privacy/"
 

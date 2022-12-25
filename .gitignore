@@ -5,3 +5,4 @@ outputs/
 spark-warehouse/
 */__pycache__/
 *.pyc
+test.py
