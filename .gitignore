@@ -1,6 +1,7 @@
 .ipynb_checkpoints/
 .DS_Store
-datasets/
+datasets/real/
+datasets/synthetic/
 outputs/
 spark-warehouse/
 */__pycache__/

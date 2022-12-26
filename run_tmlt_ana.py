@@ -1,4 +1,3 @@
-
 """Using Tumult Analytics by Tumult Labs to execute differentially private queries"""
 
 import os

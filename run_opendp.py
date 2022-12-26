@@ -1,6 +1,5 @@
 """Using the OpenDP library to execute differentially private queries by Harvard"""
 
-
 import os
 import psutil
 import time

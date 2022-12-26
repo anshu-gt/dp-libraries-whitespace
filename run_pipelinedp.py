@@ -7,8 +7,8 @@ import pandas as pd
 from tqdm import tqdm
 
 import pipeline_dp
-# import pyspark
-# from pipeline_dp.private_spark import make_private
+import pyspark
+from pipeline_dp.private_spark import make_private
 
 from commons.stats_vals import PIPELINEDP
 from commons.stats_vals import BASE_PATH, EPSILON_VALUES, MEAN, VARIANCE, COUNT, SUM
@@ -56,12 +56,15 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
     """
     
     # Reference: https://pipelinedp.io/overview/
+
+    # to run on local computes
     backend = pipeline_dp.LocalBackend()
 
+     # to run on spark computes
     ###############################################################
     # TODO: Setup Spark
+    # Reference: https://github.com/OpenMined/PipelineDP/blob/main/examples/movie_view_ratings/run_on_spark.py
     ###############################################################
-
     # Here, we use one worker thread to load the file as 1 partition.
     # For a truly distributed calculation, connect to a Spark cluster (e.g.
     # running on some cloud provider).
@@ -93,6 +96,7 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
         num_rows = data.count()
 
         # library specific setup
+        # Reference: https://pipelinedp.io/key-definitions/
         df['unique_id'] = range(1, len(df) + 1)
 
         #----------#

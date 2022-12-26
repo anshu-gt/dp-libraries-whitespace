@@ -1,4 +1,3 @@
-
 """Using IBM's Diffprivlib library to execute differentially private queries"""
 
 import os
