@@ -1,4 +1,6 @@
 
+"""Using IBM's Diffprivlib library to execute differentially private queries"""
+
 import os
 import time
 import psutil
@@ -7,9 +9,9 @@ from tqdm import tqdm
 
 from diffprivlib import BudgetAccountant
 from diffprivlib.tools import count_nonzero, mean, sum, var
+
 # TODO: Explore these
 # nanmean, nanstd, nansum, nanvar
-
 # from diffprivlib.tools.histograms import histogram, histogramdd, histogram2d
 # from diffprivlib.tools.quantiles import quantile, median, percentile
 # from diffprivlib.tools.utils import count_nonzero, mean, std, sum, var, nanmean, nanstd, nansum, nanvar
@@ -25,9 +27,11 @@ LIB_NAME = DIFFPRIVLIB
 
 
 def run_diffprivlib_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name):
+    """
+    """
 
     #------------#
-    # DATASETS   #
+    # Datasets   #
     #------------#
     for filename in os.listdir(data_path):
 
@@ -40,10 +44,13 @@ def run_diffprivlib_query(query, epsilon_values, per_epsilon_iterations, data_pa
         df = pd.read_csv(data_path + filename)
         data = df[column_name]
 
+        num_rows = data.count()
+
+        # setup specific to the library
         budget_acc = BudgetAccountant()
 
         #----------#
-        # EPSILONS #
+        # Epsilons #
         #----------#
         for epsilon in epsilon_values:
 
@@ -53,10 +60,16 @@ def run_diffprivlib_query(query, epsilon_values, per_epsilon_iterations, data_pa
             eps_relative_errors = []
             eps_scaled_errors = []
 
+            #------------------------#
+            # Per epsilon iterations #
+            #------------------------#
             for _ in tqdm(range(per_epsilon_iterations)):
 
                 process = psutil.Process(os.getpid())
 
+                #----------------------------------------#
+                # Compute differentially private queries #
+                #----------------------------------------#
                 if query == COUNT:
                     begin_time = time.time()
                     private_value = count_nonzero(
@@ -82,10 +95,11 @@ def run_diffprivlib_query(query, epsilon_values, per_epsilon_iterations, data_pa
                 eps_time_used.append(time.time() - begin_time)
 
                 # compute memory usage
-                eps_memory_used.append(process.memory_info().rss)
+                eps_memory_used.append(process.memory_info().rss)  # in bytes
 
-                num_rows = data.count()
-
+                #---------------------#
+                # Compute true values #
+                #---------------------#
                 if query == MEAN:
                     true_value = data.mean()
                 elif query == SUM:
@@ -119,20 +133,25 @@ if __name__ == "__main__":
     experimental_query = COUNT  # {MEAN, VARIANCE, COUNT, SUM}
 
     dataset_size = 1000  # {}
+
+    # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
+
+    # for synthetic datasets the column name is fixed (will change for real-life datasets)
     column_name = "values"
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 3  # [100, 500]
+    per_epsilon_iterations = 3  # for the testing purpose low value is set
 
     epsilon_values = EPSILON_VALUES
 
-    # test whether to resume from the failed epsilon values' run
+    # get the epsilon values to resume with
     output_file = f"outputs/synthetic/{LIB_NAME.lower()}/size_{dataset_size}/{experimental_query}.csv"
     if os.path.exists(output_file):
         epsilon_values = update_epsilon_values(output_file)
 
+    # test if all the epsilon values have NOT been experimented with
     if epsilon_values != -1:
 
         print("Library: ", LIB_NAME)

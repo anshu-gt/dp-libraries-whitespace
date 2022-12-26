@@ -1,22 +1,18 @@
+"""Using Google's and OpenMinded's PipelineDP library to execute differentially private queries"""
+
 import os
 import time
 import psutil
 import pandas as pd
 from tqdm import tqdm
-import pyspark
-import pipeline_dp
 
 import pipeline_dp
-from pipeline_dp.private_spark import make_private
-
+# import pyspark
+# from pipeline_dp.private_spark import make_private
 
 from commons.stats_vals import PIPELINEDP
 from commons.stats_vals import BASE_PATH, EPSILON_VALUES, MEAN, VARIANCE, COUNT, SUM
 from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
-
-# useful resource
-# https://github.com/OpenMined/PipelineDP/blob/main/examples/movie_view_ratings/run_all_frameworks.py
-# https://colab.research.google.com/github/OpenMined/PipelineDP/blob/main/examples/restaurant_visits.ipynb
 
 #-----------#
 # Constants #
@@ -34,7 +30,7 @@ def run_dp_metric_pipeline(data, epsilon, min_val, max_val, metric, column_name,
     dp_engine = pipeline_dp.DPEngine(budget_accountant, backend)
 
     data_extractors = pipeline_dp.DataExtractors(privacy_id_extractor=lambda row: row["unique_id"],
-                                                 partition_extractor=lambda row: 1,
+                                                 partition_extractor=lambda _: 1,
                                                  value_extractor=lambda row: row[column_name])
 
     params = pipeline_dp.AggregateParams(noise_kind=pipeline_dp.NoiseKind.LAPLACE,
@@ -58,7 +54,8 @@ def run_dp_metric_pipeline(data, epsilon, min_val, max_val, metric, column_name,
 def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name):
     """
     """
-
+    
+    # Reference: https://pipelinedp.io/overview/
     backend = pipeline_dp.LocalBackend()
 
     ###############################################################
@@ -71,17 +68,17 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
     # master = "local[1]"  # use one worker thread to load the file as 1 partition
     # conf = pyspark.SparkConf().setMaster(master)
     # sc = pyspark.SparkContext(conf=conf)
+    # backend = pipeline_dp.SparkRDDBackend(sc)
 
     # # movie_views = sc.textFile(FLAGS.input_file) \
     # #         .mapPartitions(parse_partition)
-    # backend = pipeline_dp.SparkRDDBackend(sc)
 
     # budget_accountant = pipeline_dp.NaiveBudgetAccountant(
     #     total_epsilon=100, total_delta=1e-7)
     # dp_engine = pipeline_dp.DPEngine(budget_accountant, backend)
 
     #------------#
-    # DATASETS   #
+    # Datasets   #
     #------------#
     for filename in os.listdir(data_path):
 
@@ -92,12 +89,14 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
             continue
 
         df = pd.read_csv(data_path + filename)
+        data = df[column_name]
+        num_rows = data.count()
+
+        # library specific setup
         df['unique_id'] = range(1, len(df) + 1)
 
-        data = df[column_name]
-
         #----------#
-        # EPSILONS #
+        # Epsilons #
         #----------#
         for epsilon in epsilon_values:
 
@@ -109,10 +108,16 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
             eps_relative_errors = []
             eps_scaled_errors = []
 
+            #------------------------#
+            # Per epsilon iterations #
+            #------------------------#
             for _ in tqdm(range(per_epsilon_iterations)):
 
                 process = psutil.Process(os.getpid())
 
+                #----------------------------------------#
+                # Compute differentially private queries #
+                #----------------------------------------#
                 if query == COUNT:
                     begin_time = time.time()
                     private_value = run_dp_metric_pipeline(df, epsilon, None, None, pipeline_dp.Metrics.COUNT,
@@ -144,8 +149,9 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
                 # compute memory usage
                 eps_memory_used.append(process.memory_info().rss)
 
-                num_rows = data.count()
-
+                #---------------------#
+                # Compute true values #
+                #---------------------#
                 if query == MEAN:
                     true_value = data.mean()
                 elif query == SUM:
@@ -179,20 +185,25 @@ if __name__ == "__main__":
     experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
 
     dataset_size = 1000  # {}
+
+    # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
+
+    # for synthetic datasets the column name is fixed (will change for real-life datasets)
     column_name = "values"
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 3  # [100, 500]
+    per_epsilon_iterations = 3  # for the testing purpose low value is set
 
     epsilon_values = EPSILON_VALUES
 
-    # test whether to resume from the failed epsilon values' run
+    # get the epsilon values to resume with
     output_file = f"outputs/synthetic/{LIB_NAME.lower()}/size_{dataset_size}/{experimental_query}.csv"
     if os.path.exists(output_file):
         epsilon_values = update_epsilon_values(output_file)
 
+    # test if all the epsilon values have NOT been experimented with
     if epsilon_values != -1:
 
         print("Library: ", LIB_NAME)

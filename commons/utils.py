@@ -32,6 +32,8 @@ def update_epsilon_values(output_file):
 
 
 def strip_end(text, suffix):
+    """
+    """
     if suffix and text.endswith(suffix):
         return text[:-len(suffix)]
     return text

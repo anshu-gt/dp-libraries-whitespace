@@ -1,4 +1,6 @@
 
+"""Using Tumult Analytics by Tumult Labs to execute differentially private queries"""
+
 import os
 import psutil
 import time
@@ -19,12 +21,8 @@ from commons.stats_vals import BASE_PATH, EPSILON_VALUES, TUMULT_ANALYTICS, MEAN
 #-----------#
 LIB_NAME = TUMULT_ANALYTICS
 
-# constants
-SOURCE_ID = "synthetic_data"
 
 # function to create a tumult analytics session with a DataFrame
-
-
 def _create_tmlt_analytics_session(source_id, df):
     return Session.from_dataframe(
         privacy_budget=PureDPBudget(epsilon=float('inf')),
@@ -35,11 +33,15 @@ def _create_tmlt_analytics_session(source_id, df):
 
 
 def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name):
+    """"""
 
+    SOURCE_ID = "synthetic_data"
+
+    # spark set-up
     spark = SparkSession.builder.getOrCreate()
 
     #------------#
-    # DATASETS   #
+    # Datasets   #
     #------------#
     for filename in os.listdir(data_path):
         print("#"*10)
@@ -60,7 +62,7 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
         session = _create_tmlt_analytics_session(SOURCE_ID, spark_df)
 
         #----------#
-        # EPSILONS #
+        # Epsilons #
         #----------#
         for epsilon in epsilon_values:
 
@@ -70,13 +72,18 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
             eps_relative_errors = []
             eps_scaled_errors = []
 
-            #------------#
-            # ITERATIONS #
-            #------------#
+            #------------------------#
+            # Per epsilon iterations #
+            #------------------------#
             for _ in tqdm(range(per_epsilon_iterations)):
 
                 process = psutil.Process(os.getpid())
 
+                #----------------------------------------#
+                # Compute differentially private queries #
+                #----------------------------------------#
+
+                # generate build
                 if query == "COUNT":
                     begin_time = time.time()
                     query_build = QueryBuilder(SOURCE_ID).count()
@@ -99,7 +106,7 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
                         query_build = QueryBuilder(SOURCE_ID).variance(
                             column_name, low=min_value, high=max_value)
 
-                # compute differentially private query output
+                # compute
                 private_value = session.evaluate(
                     query_build,
                     privacy_budget=PureDPBudget(epsilon=epsilon)
@@ -111,6 +118,9 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
                 # compute memory usage
                 eps_memory_used.append(process.memory_info().rss)
 
+                #---------------------#
+                # Compute true values #
+                #---------------------#
                 if query == "MEAN":
                     true_value = spark_df.agg(
                         {column_name: "mean"}).collect()[0][0]
@@ -151,20 +161,25 @@ if __name__ == "__main__":
     experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
 
     dataset_size = 10000000  # {}
+
+    # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
+
+    # for synthetic datasets the column name is fixed (will change for real-life datasets)
     column_name = "values"
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 3  # [100, 500]
+    per_epsilon_iterations = 3  # for the testing purpose low value is set
 
     epsilon_values = EPSILON_VALUES
 
-    # test whether to resume from the failed epsilon values' run
+    # get the epsilon values to resume with
     output_file = f"outputs/synthetic/{LIB_NAME.lower()}/size_{dataset_size}/{experimental_query}.csv"
     if os.path.exists(output_file):
         epsilon_values = update_epsilon_values(output_file)
 
+     # test if all the epsilon values have NOT been experimented with
     if epsilon_values != -1:
 
         print("Library: ", LIB_NAME)
