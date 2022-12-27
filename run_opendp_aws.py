@@ -4,8 +4,8 @@ import os
 import sys
 import psutil
 import time
-import boto3
-import botocore
+import pandas as pd
+import numpy as np
 from tqdm import tqdm
 
 from opendp.typing import *
@@ -25,11 +25,18 @@ from opendp.transformations import make_count, \
     make_sized_bounded_mean, \
     make_sized_bounded_variance
 
+# from commons.stats_vals import OPENDP
+# from commons.stats_vals import BASE_PATH, EPSILON_VALUES, MEAN, VARIANCE, COUNT, SUM
+# from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
+
+
 from opendp.mod import enable_features
 enable_features('contrib')
 enable_features("floating-point")
 
 
+import boto3
+import botocore
 from awsglue.utils import getResolvedOptions
 
 
@@ -329,7 +336,7 @@ if __name__ == "__main__":
                                'opendp_iterations',
                                'opendp_dataset_size'])
 
-    experimental_query = args['opendp_query'].lower()  # {MEAN, VARIANCE, COUNT, SUM}
+    experimental_query = args['opendp_query']  # {MEAN, VARIANCE, COUNT, SUM}
     dataset_size = int(args['opendp_dataset_size'])
 
     # S3 path to the folder containing CSVs of `dataset_size` size
@@ -347,6 +354,7 @@ if __name__ == "__main__":
     # get the epsilon values to resume with
     output_file = f"outputs/synthetic/{LIB_NAME.lower()}/size_{dataset_size}/{experimental_query.lower()}.csv"
 
+
     # check if file already exists in S3
     try:
         s3.Object(S3_DATA_BUCKET, output_file).load()
@@ -356,9 +364,8 @@ if __name__ == "__main__":
         else:
             raise
     else:
-        print("updating epsilon values...")
         epsilon_values = update_epsilon_values(f"s3://{S3_DATA_BUCKET}/{output_file}")
-        print(f"value is: {epsilon_values}")
+        print(f"Epsilon value check before conducting experiment: {epsilon_values}")
 
     # test if all the epsilon values have NOT been experimented with
     if epsilon_values != -1:
@@ -371,4 +378,4 @@ if __name__ == "__main__":
         print("Epsilon Values: ", epsilon_values)
         run_opendp_query(experimental_query, epsilon_values,per_epsilon_iterations, dataset_path, column_name)
     else:
-        print("Experiment for these params were conducted before, check: {output_file} in {S3_DATA_BUCKET}")
+        print("Experiment for these params were conducted before.")
