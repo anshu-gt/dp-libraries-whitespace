@@ -4,7 +4,8 @@ import os
 import sys
 import psutil
 import time
-import pandas as pd
+import boto3
+import botocore
 from tqdm import tqdm
 
 from opendp.typing import *
@@ -24,18 +25,11 @@ from opendp.transformations import make_count, \
     make_sized_bounded_mean, \
     make_sized_bounded_variance
 
-# from commons.stats_vals import OPENDP
-# from commons.stats_vals import BASE_PATH, EPSILON_VALUES, MEAN, VARIANCE, COUNT, SUM
-# from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
-
-
 from opendp.mod import enable_features
 enable_features('contrib')
 enable_features("floating-point")
 
 
-import boto3
-import botocore
 from awsglue.utils import getResolvedOptions
 
 
@@ -50,8 +44,6 @@ COUNT = "COUNT"
 SUM = "SUM"
 VARIANCE = "VARIANCE"
 
-BASE_PATH = "/Users/syahriikram/Documents/DPPCC/codebase/dp-libraries-whitespace/"
-
 EPSILON_VALUES = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09,
                   0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
                   1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
@@ -60,9 +52,6 @@ S3_DATA_BUCKET = "dp-experiments-data-public"
 S3_OUTPUT_BUCKET = "dp-experiments-outputs"
 
 
-
-import pandas as pd
-import numpy as np
 def update_epsilon_values(output_file):
     """
     """
@@ -83,46 +72,6 @@ def strip_end(text, suffix):
     if suffix and text.endswith(suffix):
         return text[:-len(suffix)]
     return text
-
-
-def save_synthetic_data_query_ouput(lib_name, query, epsilon, filename, error, relative_errors, scaled_errors, time_used, memory_used):
-    """
-    """
-
-    rounding_val = 2
-    out = {}
-
-    out["epsilon"] = epsilon
-
-    # data_<size>_<scale>_<skew>.csv
-    data_feats = filename.split("_")
-    out["dataset_size"] = data_feats[1]
-    out["dataset_scale"] = data_feats[2]
-    out["dataset_skew"] = strip_end(data_feats[3], ".csv")
-
-    out["mean_error"] = round(np.mean(error), rounding_val)
-    out["stdev_error"] = round(np.std(error), rounding_val)
-
-    out["mean_relative_error"] = round(np.mean(relative_errors), rounding_val)
-    out["stdev_relative_error"] = round(np.std(relative_errors), rounding_val)
-
-    out["mean_scaled_error"] = round(np.mean(scaled_errors), rounding_val)
-    out["stdev_scaled_error"] = round(np.std(scaled_errors), rounding_val)
-
-    out["mean_time_used"] = round(np.mean(time_used), rounding_val)
-    out["mean_memory_used"] = round(np.mean(memory_used), rounding_val)
-
-    df = pd.DataFrame([out])
-
-    directory = f"outputs/synthetic/{lib_name.lower()}/size_{out['dataset_size']}/"
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    output_path = directory + f"{query.lower()}.csv"
-    df.to_csv(output_path, mode="a", header=not os.path.exists(
-        output_path), index=False)
-
-    print(f"Saved results for epsilon: {epsilon}")
 
 
 def save_synthetic_data_query_output_aws(s3_path, lib_name, query, epsilon, filename, error, relative_errors, scaled_errors, time_used, memory_used):
@@ -380,7 +329,7 @@ if __name__ == "__main__":
                                'opendp_iterations',
                                'opendp_dataset_size'])
 
-    experimental_query = args['opendp_query']  # {MEAN, VARIANCE, COUNT, SUM}
+    experimental_query = args['opendp_query'].lower()  # {MEAN, VARIANCE, COUNT, SUM}
     dataset_size = int(args['opendp_dataset_size'])
 
     # S3 path to the folder containing CSVs of `dataset_size` size
@@ -396,12 +345,11 @@ if __name__ == "__main__":
     epsilon_values = EPSILON_VALUES
 
     # get the epsilon values to resume with
-    output_file = f"outputs/synthetic/{LIB_NAME.lower()}/size_{dataset_size}/{experimental_query}.csv"
-
+    output_file = f"outputs/synthetic/{LIB_NAME.lower()}/size_{dataset_size}/{experimental_query.lower()}.csv"
 
     # check if file already exists in S3
     try:
-        s3.Object(S3_DATA_BUCKET, output_file.lower()).load()
+        s3.Object(S3_DATA_BUCKET, output_file).load()
     except botocore.exceptions.ClientError as e:
         if e.response['Error']['Code'] == "404":
             print(f"The file {output_file} does not exist in {S3_DATA_BUCKET}")
@@ -423,4 +371,4 @@ if __name__ == "__main__":
         print("Epsilon Values: ", epsilon_values)
         run_opendp_query(experimental_query, epsilon_values,per_epsilon_iterations, dataset_path, column_name)
     else:
-        print("Experiment for these params were conducted before.")
+        print("Experiment for these params were conducted before, check: {output_file} in {S3_DATA_BUCKET}")
