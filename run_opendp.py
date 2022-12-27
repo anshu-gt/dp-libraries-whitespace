@@ -230,7 +230,7 @@ if __name__ == "__main__":
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 3  # for the testing purpose low value is set
+    per_epsilon_iterations = 50  # for the testing purpose low value is set
 
     epsilon_values = EPSILON_VALUES
 

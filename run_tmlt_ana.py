@@ -159,7 +159,7 @@ if __name__ == "__main__":
     #----------------#
     experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
 
-    dataset_size = 10000000  # {}
+    dataset_size = 1000  # {}
 
     # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
