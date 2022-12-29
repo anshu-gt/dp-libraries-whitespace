@@ -209,6 +209,10 @@ def run_opendp_query(query, epsilon_values, per_epsilon_iterations, data_path, c
                 eps_relative_errors.append(error/abs(true_value))
                 eps_scaled_errors.append(error/num_rows)
 
+                print("os.cpu_count(): ", os.cpu_count())
+                # print("psutil.Process().cpu_num(): ", psutil.Process().cpu_num())
+                print("len(os.sched_getaffinity(0)): ", len( os.sched_getaffinity()))
+
             save_synthetic_data_query_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
                                             eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
 
@@ -220,7 +224,7 @@ if __name__ == "__main__":
     #----------------#
     experimental_query = VARIANCE  # {MEAN, VARIANCE, COUNT, SUM}
 
-    dataset_size = 1000  # {}
+    dataset_size = 100000  # {}
 
     # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"

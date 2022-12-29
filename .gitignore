@@ -7,3 +7,4 @@ spark-warehouse/
 */__pycache__/
 *.pyc
 test.py
+run_pipelinedp_common.py

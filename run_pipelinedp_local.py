@@ -7,9 +7,6 @@ import pandas as pd
 from tqdm import tqdm
 
 import pipeline_dp
-import pyspark
-from pipeline_dp.private_spark import make_private
-
 from commons.stats_vals import PIPELINEDP
 from commons.stats_vals import BASE_PATH, EPSILON_VALUES, MEAN, VARIANCE, COUNT, SUM
 from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
@@ -19,61 +16,26 @@ from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
 #-----------#
 LIB_NAME = PIPELINEDP
 
-# Framework independent function
 
-
-def _get_backend(operations_processor):
-
-    if operations_processor == "local":
-        # to run on local computes
-        backend = pipeline_dp.LocalBackend()
-    else:
-        # to run on spark compute
-        ###############################################################
-        # TODO: Setup Spark
-        # Reference: https://github.com/OpenMined/PipelineDP/blob/main/examples/movie_view_ratings/run_on_spark.py
-        ###############################################################
-
-        # Here, we use one worker thread to load the file as 1 partition.
-        # For a truly distributed calculation, connect to a Spark cluster (e.g.
-        # running on some cloud provider).
-        master = "local[1]" # use one worker thread to load the file as 1 partition
-        conf = pyspark.SparkConf().setMaster(master)
-        sc = pyspark.SparkContext(conf=conf)
-        backend = pipeline_dp.SparkRDDBackend(sc)
-
-        # # movie_views = sc.textFile(FLAGS.input_file) \
-        # #         .mapPartitions(parse_partition)
-
-    return backend
-
-
-def run_dp_metric_pipeline(data, epsilon, min_val, max_val, metric, column_name, backend, operations_processor):
-    """
-    """
+def compute_dp_metric(data, epsilon, metric, column_name, backend, min_val=None, max_val=None):
+    """"""
     budget_accountant = pipeline_dp.NaiveBudgetAccountant(
         total_epsilon=100, total_delta=1e-7)
 
-
-    # Wrap Spark's RDD into its private version
-    # private_movie_views = \
-    #     make_private(movie_views, budget_accountant, lambda mv: mv.user_id)
-
-
     dp_engine = pipeline_dp.DPEngine(budget_accountant, backend)
 
-    data_extractors = pipeline_dp.DataExtractors(privacy_id_extractor=lambda row: row["unique_id"],
+    data_extractors = pipeline_dp.DataExtractors(privacy_id_extractor=lambda row: row["id"],
                                                  partition_extractor=lambda _: 1,
                                                  value_extractor=lambda row: row[column_name])
 
     params = pipeline_dp.AggregateParams(noise_kind=pipeline_dp.NoiseKind.LAPLACE,
                                          budget_weight=epsilon,
-                                         # [pipeline_dp.Metrics.COUNT, pipeline_dp.Metrics.SUM],
                                          metrics=[metric],
                                          max_partitions_contributed=1,
                                          max_contributions_per_partition=1,
                                          min_value=min_val,
                                          max_value=max_val)
+
     # public_partitions=list(range(1, 8))
     rows = [index_row[1] for index_row in data.iterrows()]
     dp_result = dp_engine.aggregate(
@@ -81,16 +43,14 @@ def run_dp_metric_pipeline(data, epsilon, min_val, max_val, metric, column_name,
 
     budget_accountant.compute_budgets()
 
-    if operations_processor == "local":
-        return list(dp_result)
-    else:
-        return dp_result.collect()
+    return list(dp_result)
 
 
-def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name, operations_processor="local"):
+def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name):
     """
     """
-    backend = _get_backend(operations_processor)
+
+    backend = pipeline_dp.LocalBackend()
 
     #------------#
     # Datasets   #
@@ -109,7 +69,7 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
 
         # library specific setup
         # Reference: https://pipelinedp.io/key-definitions/
-        df['unique_id'] = range(1, len(df) + 1)
+        df['id'] = range(1, len(df) + 1)
 
         #----------#
         # Epsilons #
@@ -131,34 +91,30 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
 
                 process = psutil.Process(os.getpid())
 
+                begin_time = time.time()
+
                 #----------------------------------------#
                 # Compute differentially private queries #
                 #----------------------------------------#
                 if query == COUNT:
-                    begin_time = time.time()
-                    private_value = run_dp_metric_pipeline(df, epsilon, None, None, pipeline_dp.Metrics.COUNT,
-                                                           column_name, backend, operations_processor)
-                    print("-->: ", private_value)
-                    private_value = private_value[0][1][0]
+                    dp_result = compute_dp_metric(
+                        df, epsilon, pipeline_dp.Metrics.COUNT, column_name, backend)
                 else:
                     min_value = data.min()
                     max_value = data.max()
 
                     if query == MEAN:
-                        begin_time = time.time()
-                        private_value = run_dp_metric_pipeline(df, epsilon, min_value, max_value, pipeline_dp.Metrics.MEAN,
-                                                               column_name, backend, operations_processor)
-                        private_value = private_value[0][1][0]
+                        dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.MEAN,
+                                                      column_name, backend, min_value, max_value)
                     elif query == SUM:
-                        begin_time = time.time()
-                        private_value = run_dp_metric_pipeline(df, epsilon, min_value, max_value, pipeline_dp.Metrics.SUM,
-                                                               column_name, backend, operations_processor)
-                        private_value = private_value[0][1][0]
+                        dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.SUM,
+                                                      column_name, backend, min_value, max_value)
                     elif query == VARIANCE:
-                        begin_time = time.time()
-                        private_value = run_dp_metric_pipeline(df, epsilon, min_value, max_value, pipeline_dp.Metrics.VARIANCE,
-                                                               column_name, backend, operations_processor)
-                        private_value = private_value[0][1][0]
+                        dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.VARIANCE,
+                                                      column_name, backend, min_value, max_value)
+
+                # rdd action
+                private_value = dp_result[0][1][0]
 
                 # compute execution time
                 eps_time_used.append(time.time() - begin_time)
@@ -199,14 +155,9 @@ if __name__ == "__main__":
     #----------------#
     # Configurations #
     #----------------#
+    experimental_query = SUM  # {MEAN, VARIANCE, COUNT, SUM}
 
-    # Reference: https://pipelinedp.io/overview/
-    # whether to use distributed or local compute resources
-    operations_processor = "spark"  # {local, spark}
-
-    experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
-
-    dataset_size = 1000  # {}
+    dataset_size = 10  # {}
 
     # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
@@ -228,7 +179,7 @@ if __name__ == "__main__":
     # test if all the epsilon values have NOT been experimented with
     if epsilon_values != -1:
 
-        print("Library: ", LIB_NAME)
+        print("Library: ", LIB_NAME, " on Local")
         print("Query: ", experimental_query)
         print("Iterations: ", per_epsilon_iterations)
         print("Dataset size: ", dataset_size)
@@ -236,4 +187,4 @@ if __name__ == "__main__":
         print("Epsilon Values: ", epsilon_values)
 
         run_pipelinedp_query(experimental_query, epsilon_values,
-                             per_epsilon_iterations, dataset_path, column_name, operations_processor)
+                             per_epsilon_iterations, dataset_path, column_name)
