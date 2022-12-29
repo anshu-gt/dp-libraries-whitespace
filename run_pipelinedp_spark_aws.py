@@ -248,113 +248,113 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
 
                 # looping through the S3 on the appropriate data size subfolder
                 if filename.startswith(f"synthetic_data/size_{dataset_size}/"):
-                    for filename in os.listdir(data_path):
+                    # for filename in os.listdir(data_path):
 
-                        print("#"*10)
-                        print("Filename: ", filename)
-                        print("#"*10)
-                        if not filename.endswith(".csv"):
-                            continue
+                    print("#"*10)
+                    print("Filename: ", filename)
+                    print("#"*10)
+                    if not filename.endswith(".csv"):
+                        continue
 
-                        # df = pd.read_csv(data_path + filename)
-                        df = pd.read_csv(f"s3a://{S3_DATA_BUCKET}/{filename}")
-                        data = df[column_name]
-                        num_rows = data.count()
+                    # df = pd.read_csv(data_path + filename)
+                    df = pd.read_csv(f"s3a://{S3_DATA_BUCKET}/{filename}")
+                    data = df[column_name]
+                    num_rows = data.count()
 
-                        try:
-                            # load file data into Spark's RDD
-                            data_rdd = saprk_context.textFile(
-                                f"s3a://{S3_DATA_BUCKET}/{filename}").mapPartitions(_parse_partition)
-                        except Exception as e:
-                            print(e)
+                    try:
+                        # load file data into Spark's RDD
+                        data_rdd = saprk_context.textFile(
+                            f"s3a://{S3_DATA_BUCKET}/{filename}").mapPartitions(_parse_partition)
+                    except Exception as e:
+                        print(e)
 
-                        # breakpoint()
+                    # breakpoint()
 
-                        #----------#
-                        # Epsilons #
-                        #----------#
-                        for epsilon in epsilon_values:
+                    #----------#
+                    # Epsilons #
+                    #----------#
+                    for epsilon in epsilon_values:
 
-                            print("epsilon: ", epsilon)
+                        print("epsilon: ", epsilon)
 
-                            eps_time_used = []
-                            eps_memory_used = []
-                            eps_errors = []
-                            eps_relative_errors = []
-                            eps_scaled_errors = []
+                        eps_time_used = []
+                        eps_memory_used = []
+                        eps_errors = []
+                        eps_relative_errors = []
+                        eps_scaled_errors = []
 
-                            #------------------------#
-                            # Per epsilon iterations #
-                            #------------------------#
-                            for _ in tqdm(range(per_epsilon_iterations)):
+                        #------------------------#
+                        # Per epsilon iterations #
+                        #------------------------#
+                        for _ in tqdm(range(per_epsilon_iterations)):
 
-                                begin_time = time.time()
+                            begin_time = time.time()
 
-                                budget_accountant = pipeline_dp.NaiveBudgetAccountant(
-                                    total_epsilon=100, total_delta=1e-7)
+                            budget_accountant = pipeline_dp.NaiveBudgetAccountant(
+                                total_epsilon=100, total_delta=1e-7)
 
-                                # wrap Spark's RDD into its private version
-                                private_rdd = make_private(
-                                    data_rdd, budget_accountant, lambda val: val["id"])
+                            # wrap Spark's RDD into its private version
+                            private_rdd = make_private(
+                                data_rdd, budget_accountant, lambda val: val["id"])
 
-                                process = psutil.Process(os.getpid())
+                            process = psutil.Process(os.getpid())
 
-                                #----------------------------------------#
-                                # Compute differentially private queries #
-                                #----------------------------------------#
-                                if query == COUNT:
-                                    dp_result = _compute_dp_count(private_rdd, epsilon)
-                                else:
-                                    min_value = data.min()
-                                    max_value = data.max()
+                            #----------------------------------------#
+                            # Compute differentially private queries #
+                            #----------------------------------------#
+                            if query == COUNT:
+                                dp_result = _compute_dp_count(private_rdd, epsilon)
+                            else:
+                                min_value = data.min()
+                                max_value = data.max()
 
-                                    if query == MEAN:
-                                        dp_result = _compute_dp_mean(
-                                            private_rdd, epsilon, min_value, max_value)
-                                    elif query == SUM:
-                                        dp_result = _compute_dp_sum(
-                                            private_rdd, epsilon, min_value, max_value)
-                                    elif query == VARIANCE:
-                                        dp_result = _compute_dp_variance(
-                                            private_rdd, epsilon, min_value, max_value)
-
-                                budget_accountant.compute_budgets()
-                                
-                                # rdd action
-                                private_value = dp_result.collect()[0][1]
-
-                                # compute execution time
-                                eps_time_used.append(time.time() - begin_time)
-
-                                # compute memory usage
-                                eps_memory_used.append(process.memory_info().rss)
-
-                                #---------------------#
-                                # Compute true values #
-                                #---------------------#
                                 if query == MEAN:
-                                    true_value = data.mean()
+                                    dp_result = _compute_dp_mean(
+                                        private_rdd, epsilon, min_value, max_value)
                                 elif query == SUM:
-                                    true_value = data.sum()
+                                    dp_result = _compute_dp_sum(
+                                        private_rdd, epsilon, min_value, max_value)
                                 elif query == VARIANCE:
-                                    true_value = data.var()
-                                elif query == COUNT:
-                                    true_value = num_rows
+                                    dp_result = _compute_dp_variance(
+                                        private_rdd, epsilon, min_value, max_value)
 
-                                # print("min_value: ", min_value)
-                                # print("max_value: ", max_value)
-                                print("true_value:", true_value)
-                                print("private_value:", private_value)
+                            budget_accountant.compute_budgets()
+                            
+                            # rdd action
+                            private_value = dp_result.collect()[0][1]
 
-                                # compute errors
-                                error = abs(true_value - private_value)
+                            # compute execution time
+                            eps_time_used.append(time.time() - begin_time)
 
-                                eps_errors.append(error)
-                                eps_relative_errors.append(error/abs(true_value))
-                                eps_scaled_errors.append(error/num_rows)
+                            # compute memory usage
+                            eps_memory_used.append(process.memory_info().rss)
 
-                            save_synthetic_data_query_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
-                                                            eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
+                            #---------------------#
+                            # Compute true values #
+                            #---------------------#
+                            if query == MEAN:
+                                true_value = data.mean()
+                            elif query == SUM:
+                                true_value = data.sum()
+                            elif query == VARIANCE:
+                                true_value = data.var()
+                            elif query == COUNT:
+                                true_value = num_rows
+
+                            # print("min_value: ", min_value)
+                            # print("max_value: ", max_value)
+                            print("true_value:", true_value)
+                            print("private_value:", private_value)
+
+                            # compute errors
+                            error = abs(true_value - private_value)
+
+                            eps_errors.append(error)
+                            eps_relative_errors.append(error/abs(true_value))
+                            eps_scaled_errors.append(error/num_rows)
+
+                        save_synthetic_data_query_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
+                                                        eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
 
 if __name__ == "__main__":
 
