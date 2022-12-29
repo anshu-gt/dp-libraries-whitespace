@@ -31,7 +31,7 @@ def dataset_generation(size, scale, skew):
 
 scale_diversity = [50, 250, 500]
 skew_diversity = [0, 5, 50]
-size_diversity = [1000, 100000, 10_000_000]
+size_diversity = [100_000_000]
 
 all_combinations = list(itertools.product(*[scale_diversity, skew_diversity]))
 
