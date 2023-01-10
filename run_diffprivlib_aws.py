@@ -4,7 +4,6 @@ import os
 import sys
 import time
 import psutil
-import sys
 import pandas as pd
 import numpy as np
 from tqdm import tqdm

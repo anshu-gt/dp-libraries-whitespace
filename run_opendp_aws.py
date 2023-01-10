@@ -1,8 +1,5 @@
 """Using the OpenDP library to execute differentially private queries by Harvard"""
 
-from awsglue.utils import getResolvedOptions
-import botocore
-import boto3
 import os
 import sys
 import psutil
@@ -24,6 +21,10 @@ from opendp.transformations import make_count, \
 from opendp.mod import enable_features
 enable_features('contrib')
 enable_features("floating-point")
+
+import boto3
+import botocore
+from awsglue.utils import getResolvedOptions
 
 
 # queries to experiment
