@@ -197,10 +197,8 @@ def run_opendp_query(query, epsilon_values, per_epsilon_iterations, data_path, c
                 elif query == COUNT:
                     true_value = num_rows
 
-                # print("min_value: ", min_value)
-                # print("max_value: ", max_value)
-                print("true_value:", true_value)
-                print("private_value:", private_value)
+                # print("true_value:", true_value)
+                # print("private_value:", private_value)
 
                 # compute errors
                 error = abs(true_value - private_value)
@@ -208,10 +206,6 @@ def run_opendp_query(query, epsilon_values, per_epsilon_iterations, data_path, c
                 eps_errors.append(error)
                 eps_relative_errors.append(error/abs(true_value))
                 eps_scaled_errors.append(error/num_rows)
-
-                print("os.cpu_count(): ", os.cpu_count())
-                # print("psutil.Process().cpu_num(): ", psutil.Process().cpu_num())
-                print("len(os.sched_getaffinity(0)): ", len( os.sched_getaffinity()))
 
             save_synthetic_data_query_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
                                             eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
@@ -222,9 +216,9 @@ if __name__ == "__main__":
     #----------------#
     # Configurations #
     #----------------#
-    experimental_query = VARIANCE  # {MEAN, VARIANCE, COUNT, SUM}
+    experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
 
-    dataset_size = 100000  # {}
+    dataset_size = 1000  # {}
 
     # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
@@ -234,7 +228,7 @@ if __name__ == "__main__":
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 50  # for the testing purpose low value is set
+    per_epsilon_iterations = 100  # for the testing purpose low value is set
 
     epsilon_values = EPSILON_VALUES
 

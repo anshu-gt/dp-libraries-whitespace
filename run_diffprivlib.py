@@ -9,12 +9,6 @@ from tqdm import tqdm
 from diffprivlib import BudgetAccountant
 from diffprivlib.tools import count_nonzero, mean, sum, var
 
-# TODO: Explore these
-# nanmean, nanstd, nansum, nanvar
-# from diffprivlib.tools.histograms import histogram, histogramdd, histogram2d
-# from diffprivlib.tools.quantiles import quantile, median, percentile
-# from diffprivlib.tools.utils import count_nonzero, mean, std, sum, var, nanmean, nanstd, nansum, nanvar
-
 from commons.stats_vals import DIFFPRIVLIB
 from commons.stats_vals import BASE_PATH, EPSILON_VALUES, MEAN, VARIANCE, COUNT, SUM
 from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
@@ -46,7 +40,7 @@ def run_diffprivlib_query(query, epsilon_values, per_epsilon_iterations, data_pa
         num_rows = data.count()
 
         # setup specific to the library
-        budget_acc = BudgetAccountant()
+        # budget_acc = BudgetAccountant()
 
         #----------#
         # Epsilons #
@@ -71,24 +65,23 @@ def run_diffprivlib_query(query, epsilon_values, per_epsilon_iterations, data_pa
                 #----------------------------------------#
                 if query == COUNT:
                     begin_time = time.time()
-                    private_value = count_nonzero(
-                        data, epsilon=epsilon, accountant=budget_acc)
+                    private_value = count_nonzero(data, epsilon=epsilon)
                 else:
                     min_value = data.min()
                     max_value = data.max()
 
                     if query == MEAN:
                         begin_time = time.time()
-                        private_value = mean(data, epsilon=epsilon, bounds=(
-                            min_value, max_value), accountant=budget_acc)
+                        private_value = mean(
+                            data, epsilon=epsilon, bounds=(min_value, max_value))
                     elif query == SUM:
                         begin_time = time.time()
-                        private_value = sum(data, epsilon=epsilon, bounds=(
-                            min_value, max_value), accountant=budget_acc)
+                        private_value = sum(
+                            data, epsilon=epsilon, bounds=(min_value, max_value))
                     elif query == VARIANCE:
                         begin_time = time.time()
-                        private_value = var(data, epsilon=epsilon, bounds=(
-                            min_value, max_value), accountant=budget_acc)
+                        private_value = var(
+                            data, epsilon=epsilon, bounds=(min_value, max_value))
 
                 # compute execution time
                 eps_time_used.append(time.time() - begin_time)
@@ -108,10 +101,8 @@ def run_diffprivlib_query(query, epsilon_values, per_epsilon_iterations, data_pa
                 elif query == COUNT:
                     true_value = num_rows
 
-                # print("min_value: ", min_value)
-                # print("max_value: ", max_value)
-                print("true_value:", true_value)
-                print("private_value:", private_value)
+                # print("true_value:", true_value)
+                # print("private_value:", private_value)
 
                 # compute errors
                 error = abs(true_value - private_value)
@@ -141,7 +132,7 @@ if __name__ == "__main__":
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 3  # for the testing purpose low value is set
+    per_epsilon_iterations = 100  # for the testing purpose low value is set
 
     epsilon_values = EPSILON_VALUES
 

@@ -26,8 +26,8 @@ def _create_tmlt_analytics_session(source_id, df):
     return Session.from_dataframe(
         privacy_budget=PureDPBudget(epsilon=float('inf')),
         source_id=source_id,
-        dataframe=df,
-        protected_change=AddOneRow(),
+        dataframe=df
+        # protected_change=AddOneRow(),
     )
 
 
@@ -38,6 +38,13 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
 
     # spark set-up
     spark = SparkSession.builder.getOrCreate()
+
+#     spark = (
+#     SparkSession.builder
+#     .config("spark.driver.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
+#     .config("spark.executor.extraJavaOptions", "-Dio.netty.tryReflectionSetAccessible=true")
+#     .getOrCreate()
+# )
 
     #------------#
     # Datasets   #
@@ -88,9 +95,9 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
                     query_build = QueryBuilder(SOURCE_ID).count()
                 else:
                     min_value = spark_df.agg(
-                        {column_name: "min"}).collect()[0][0]
+                        {column_name: "min"}).first()[0]
                     max_value = spark_df.agg(
-                        {column_name: "max"}).collect()[0][0]
+                        {column_name: "max"}).first()[0]
 
                     if query == "MEAN":
                         begin_time = time.time()
@@ -109,7 +116,7 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
                 private_value = session.evaluate(
                     query_build,
                     privacy_budget=PureDPBudget(epsilon=epsilon)
-                ).collect()[0][0]
+                ).first()[0]
 
                 # compute execution time
                 eps_time_used.append(time.time() - begin_time)
@@ -122,22 +129,16 @@ def run_tmlt_analytics_query(query, epsilon_values, per_epsilon_iterations, data
                 #---------------------#
                 if query == "MEAN":
                     true_value = spark_df.agg(
-                        {column_name: "mean"}).collect()[0][0]
+                        {column_name: "mean"}).first()[0]
                 elif query == "SUM":
                     true_value = spark_df.agg(
-                        {column_name: "sum"}).collect()[0][0]
+                        {column_name: "sum"}).first()[0]
                 elif query == "VARIANCE":
                     true_value = spark_df.agg(
-                        {column_name: "variance"}).collect()[0][0]
+                        {column_name: "variance"}).first()[0]
                 elif query == "COUNT":
                     true_value = num_rows
 
-                # print("true_value: ", true_value)
-                # print("private_value: ", private_value)
-                # print("memory_list: ", memory_list)
-                # print("time_list: ", time_list)
-                print("min_value: ", min_value)
-                print("max_value: ", max_value)
                 print("true_value:", true_value)
                 print("private_value:", private_value)
 
@@ -157,9 +158,9 @@ if __name__ == "__main__":
     #----------------#
     # Configurations #
     #----------------#
-    experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
+    experimental_query = SUM  # {MEAN, VARIANCE, COUNT, SUM}
 
-    dataset_size = 1000  # {}
+    dataset_size = 10000  # {}
 
     # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
@@ -169,7 +170,7 @@ if __name__ == "__main__":
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 3  # for the testing purpose low value is set
+    per_epsilon_iterations = 100  # for the testing purpose low value is set
 
     epsilon_values = EPSILON_VALUES
 

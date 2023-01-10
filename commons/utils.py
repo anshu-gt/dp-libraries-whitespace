@@ -69,6 +69,7 @@ def save_synthetic_data_query_ouput(lib_name, query, epsilon, filename, error, r
     df = pd.DataFrame([out])
 
     directory = f"outputs/synthetic/{lib_name.lower()}/size_{out['dataset_size']}/"
+
     if not os.path.exists(directory):
         os.makedirs(directory)
 

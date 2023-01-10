@@ -8,3 +8,4 @@ spark-warehouse/
 *.pyc
 test.py
 run_pipelinedp_common.py
+aws_outputs/

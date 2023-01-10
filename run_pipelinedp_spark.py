@@ -123,7 +123,7 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
         if not filename.endswith(".csv"):
             continue
 
-        df = pd.read_csv(data_path + filename, skiprows=0)
+        df = pd.read_csv(data_path + filename)
         data = df[column_name]
         num_rows = data.count()
 
@@ -230,7 +230,7 @@ if __name__ == "__main__":
     #----------------#
     experimental_query = MEAN  # {MEAN, VARIANCE, COUNT, SUM}
 
-    dataset_size = 10  # {}
+    dataset_size = 10000000  # {}
 
     # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"

@@ -17,7 +17,7 @@ from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
 LIB_NAME = PIPELINEDP
 
 
-def compute_dp_metric(data, epsilon, metric, column_name, backend, min_val=None, max_val=None):
+def compute_dp_metric(rows, epsilon, metric, column_name, backend, min_val=None, max_val=None):
     """"""
     budget_accountant = pipeline_dp.NaiveBudgetAccountant(
         total_epsilon=100, total_delta=1e-7)
@@ -36,10 +36,7 @@ def compute_dp_metric(data, epsilon, metric, column_name, backend, min_val=None,
                                          min_value=min_val,
                                          max_value=max_val)
 
-    # public_partitions=list(range(1, 8))
-    rows = [index_row[1] for index_row in data.iterrows()]
-    dp_result = dp_engine.aggregate(
-        rows, params, data_extractors)  # , public_partitions)
+    dp_result = dp_engine.aggregate(rows, params, data_extractors)
 
     budget_accountant.compute_budgets()
 
@@ -70,14 +67,12 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
         # library specific setup
         # Reference: https://pipelinedp.io/key-definitions/
         df['id'] = range(1, len(df) + 1)
+        rows = [index_row[1] for index_row in df.iterrows()]
 
         #----------#
         # Epsilons #
         #----------#
         for epsilon in epsilon_values:
-
-            print("epsilon: ", epsilon)
-
             eps_time_used = []
             eps_memory_used = []
             eps_errors = []
@@ -91,26 +86,28 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
 
                 process = psutil.Process(os.getpid())
 
-                begin_time = time.time()
-
                 #----------------------------------------#
                 # Compute differentially private queries #
                 #----------------------------------------#
                 if query == COUNT:
+                    begin_time = time.time()
                     dp_result = compute_dp_metric(
-                        df, epsilon, pipeline_dp.Metrics.COUNT, column_name, backend)
+                        rows, epsilon, pipeline_dp.Metrics.COUNT, column_name, backend)
                 else:
                     min_value = data.min()
                     max_value = data.max()
 
                     if query == MEAN:
-                        dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.MEAN,
+                        begin_time = time.time()
+                        dp_result = compute_dp_metric(rows, epsilon, pipeline_dp.Metrics.MEAN,
                                                       column_name, backend, min_value, max_value)
                     elif query == SUM:
-                        dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.SUM,
+                        begin_time = time.time()
+                        dp_result = compute_dp_metric(rows, epsilon, pipeline_dp.Metrics.SUM,
                                                       column_name, backend, min_value, max_value)
                     elif query == VARIANCE:
-                        dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.VARIANCE,
+                        begin_time = time.time()
+                        dp_result = compute_dp_metric(rows, epsilon, pipeline_dp.Metrics.VARIANCE,
                                                       column_name, backend, min_value, max_value)
 
                 # rdd action
@@ -134,10 +131,8 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
                 elif query == COUNT:
                     true_value = num_rows
 
-                # print("min_value: ", min_value)
-                # print("max_value: ", max_value)
-                print("true_value:", true_value)
-                print("private_value:", private_value)
+                # print("true_value:", true_value)
+                # print("private_value:", private_value)
 
                 # compute errors
                 error = abs(true_value - private_value)
@@ -155,9 +150,9 @@ if __name__ == "__main__":
     #----------------#
     # Configurations #
     #----------------#
-    experimental_query = SUM  # {MEAN, VARIANCE, COUNT, SUM}
+    experimental_query = COUNT  # {MEAN, VARIANCE, COUNT, SUM}
 
-    dataset_size = 10  # {}
+    dataset_size = 10000  # {}
 
     # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
@@ -167,7 +162,7 @@ if __name__ == "__main__":
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
-    per_epsilon_iterations = 3  # for the testing purpose low value is set
+    per_epsilon_iterations = 100  # for the testing purpose low value is set
 
     epsilon_values = EPSILON_VALUES
 
