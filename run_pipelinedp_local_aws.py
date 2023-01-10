@@ -58,46 +58,6 @@ def strip_end(text, suffix):
     return text
 
 
-def save_synthetic_data_query_ouput(lib_name, query, epsilon, filename, error, relative_errors, scaled_errors, time_used, memory_used):
-    """
-    """
-
-    rounding_val = 2
-    out = {}
-
-    out["epsilon"] = epsilon
-
-    # data_<size>_<scale>_<skew>.csv
-    data_feats = filename.split("_")
-    out["dataset_size"] = data_feats[1]
-    out["dataset_scale"] = data_feats[2]
-    out["dataset_skew"] = strip_end(data_feats[3], ".csv")
-
-    out["mean_error"] = round(np.mean(error), rounding_val)
-    out["stdev_error"] = round(np.std(error), rounding_val)
-
-    out["mean_relative_error"] = round(np.mean(relative_errors), rounding_val)
-    out["stdev_relative_error"] = round(np.std(relative_errors), rounding_val)
-
-    out["mean_scaled_error"] = round(np.mean(scaled_errors), rounding_val)
-    out["stdev_scaled_error"] = round(np.std(scaled_errors), rounding_val)
-
-    out["mean_time_used"] = round(np.mean(time_used), rounding_val)
-    out["mean_memory_used"] = round(np.mean(memory_used), rounding_val)
-
-    df = pd.DataFrame([out])
-
-    directory = f"outputs/synthetic/{lib_name.lower()}/size_{out['dataset_size']}/"
-    if not os.path.exists(directory):
-        os.makedirs(directory)
-
-    output_path = directory + f"{query.lower()}.csv"
-    df.to_csv(output_path, mode="a", header=not os.path.exists(
-        output_path), index=False)
-
-    print(f"Saved results for epsilon: {epsilon}")
-
-
 def save_synthetic_data_query_output_aws(s3_path, lib_name, query, epsilon, filename, error, relative_errors, scaled_errors, time_used, memory_used):
     """
     """
@@ -135,10 +95,12 @@ def save_synthetic_data_query_output_aws(s3_path, lib_name, query, epsilon, file
 
     print(f"Saved results for epsilon: {epsilon}")
 
+    return out["mean_time_used"]
+
 #-----------------------------------------------#
 
 
-def compute_dp_metric(data, epsilon, metric, column_name, backend, min_val=None, max_val=None):
+def compute_dp_metric(rows, epsilon, metric, column_name, backend, min_val=None, max_val=None):
     """"""
     budget_accountant = pipeline_dp.NaiveBudgetAccountant(
         total_epsilon=100, total_delta=1e-7)
@@ -157,8 +119,6 @@ def compute_dp_metric(data, epsilon, metric, column_name, backend, min_val=None,
                                          min_value=min_val,
                                          max_value=max_val)
 
-    # public_partitions=list(range(1, 8))
-    rows = [index_row[1] for index_row in data.iterrows()]
     dp_result = dp_engine.aggregate(
         rows, params, data_extractors)  # , public_partitions)
 
@@ -167,9 +127,10 @@ def compute_dp_metric(data, epsilon, metric, column_name, backend, min_val=None,
     return list(dp_result)
 
 
-def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name):
+def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, column_name, limiting_time_sec):
     """
     """
+    count_exceeded_limit = 0
 
     backend = pipeline_dp.LocalBackend()
 
@@ -199,6 +160,7 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
                     df = pd.read_csv(f"s3a://{S3_DATA_BUCKET}/{filename}")
                     data = df[column_name]
                     num_rows = data.count()
+                    rows = [index_row[1] for index_row in df.iterrows()]
 
                     # library specific setup
                     # Reference: https://pipelinedp.io/key-definitions/
@@ -224,26 +186,28 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
 
                             process = psutil.Process(os.getpid())
 
-                            begin_time = time.time()
-
                             #----------------------------------------#
                             # Compute differentially private queries #
                             #----------------------------------------#
                             if query == COUNT:
+                                begin_time = time.time()
                                 dp_result = compute_dp_metric(
-                                    df, epsilon, pipeline_dp.Metrics.COUNT, column_name, backend)
+                                    rows, epsilon, pipeline_dp.Metrics.COUNT, column_name, backend)
                             else:
                                 min_value = data.min()
                                 max_value = data.max()
 
                                 if query == MEAN:
-                                    dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.MEAN,
+                                    begin_time = time.time()
+                                    dp_result = compute_dp_metric(rows, epsilon, pipeline_dp.Metrics.MEAN,
                                                                   column_name, backend, min_value, max_value)
                                 elif query == SUM:
-                                    dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.SUM,
+                                    begin_time = time.time()
+                                    dp_result = compute_dp_metric(rows, epsilon, pipeline_dp.Metrics.SUM,
                                                                   column_name, backend, min_value, max_value)
                                 elif query == VARIANCE:
-                                    dp_result = compute_dp_metric(df, epsilon, pipeline_dp.Metrics.VARIANCE,
+                                    begin_time = time.time()
+                                    dp_result = compute_dp_metric(rows, epsilon, pipeline_dp.Metrics.VARIANCE,
                                                                   column_name, backend, min_value, max_value)
 
                             # rdd action
@@ -269,8 +233,8 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
 
                             # print("min_value: ", min_value)
                             # print("max_value: ", max_value)
-                            print("true_value:", true_value)
-                            print("private_value:", private_value)
+                            # print("true_value:", true_value)
+                            # print("private_value:", private_value)
 
                             # compute errors
                             error = abs(true_value - private_value)
@@ -279,8 +243,16 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
                             eps_relative_errors.append(error/abs(true_value))
                             eps_scaled_errors.append(error/num_rows)
 
-                        save_synthetic_data_query_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
-                                                        eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
+                        mean_time_used = save_synthetic_data_query_output_aws(LIB_NAME, query, epsilon, filename, eps_errors,
+                                                                              eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
+
+                        if mean_time_used >= limiting_time_sec:
+                            if count_exceeded_limit >= 5:
+                                print(
+                                    f"{LIB_NAME} | {filename}: Terminated process!! Last executed epsilon {epsilon} for {query} query.")
+                                sys.exit()
+                            else:
+                                count_exceeded_limit += 1
 
 
 if __name__ == "__main__":
@@ -308,6 +280,8 @@ if __name__ == "__main__":
 
     # for synthetic datasets the column name is fixed (will change for real-life datasets)
     column_name = "values"
+
+    limiting_time_sec = 0.5
 
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
@@ -347,6 +321,6 @@ if __name__ == "__main__":
         print("Epsilon Values: ", epsilon_values)
 
         run_pipelinedp_query(experimental_query, epsilon_values,
-                             per_epsilon_iterations, dataset_path, column_name)
+                             per_epsilon_iterations, column_name, limiting_time_sec)
     else:
         print("Experiment for these params were conducted before.")

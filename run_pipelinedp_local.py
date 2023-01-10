@@ -1,6 +1,7 @@
 """Using Google's and OpenMinded's PipelineDP library to execute differentially private queries"""
 
 import os
+import sys
 import time
 import psutil
 import pandas as pd
@@ -43,11 +44,13 @@ def compute_dp_metric(rows, epsilon, metric, column_name, backend, min_val=None,
     return list(dp_result)
 
 
-def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name):
+def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name, limiting_time_sec):
     """
     """
 
     backend = pipeline_dp.LocalBackend()
+
+    count_exceeded_limit = 0
 
     #------------#
     # Datasets   #
@@ -141,8 +144,16 @@ def run_pipelinedp_query(query, epsilon_values, per_epsilon_iterations, data_pat
                 eps_relative_errors.append(error/abs(true_value))
                 eps_scaled_errors.append(error/num_rows)
 
-            save_synthetic_data_query_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
-                                            eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
+            mean_time_used = save_synthetic_data_query_ouput(LIB_NAME, query, epsilon, filename, eps_errors,
+                                                             eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
+
+            if mean_time_used >= limiting_time_sec:
+                if count_exceeded_limit >= 5:
+                    print(
+                        f"{LIB_NAME} | {filename}: Terminated process!! Last executed epsilon {epsilon} for {query} query.")
+                    sys.exit()
+                else:
+                    count_exceeded_limit += 1
 
 
 if __name__ == "__main__":
@@ -150,9 +161,12 @@ if __name__ == "__main__":
     #----------------#
     # Configurations #
     #----------------#
-    experimental_query = COUNT  # {MEAN, VARIANCE, COUNT, SUM}
 
-    dataset_size = 10000  # {}
+    limiting_time_sec = 0.02
+
+    experimental_query = SUM  # {MEAN, VARIANCE, COUNT, SUM}
+
+    dataset_size = 1000  # {}
 
     # path to the folder containing CSVs of `dataset_size` size
     dataset_path = BASE_PATH + f"datasets/synthetic_data/size_{dataset_size}/"
@@ -182,4 +196,4 @@ if __name__ == "__main__":
         print("Epsilon Values: ", epsilon_values)
 
         run_pipelinedp_query(experimental_query, epsilon_values,
-                             per_epsilon_iterations, dataset_path, column_name)
+                             per_epsilon_iterations, dataset_path, column_name, limiting_time_sec)

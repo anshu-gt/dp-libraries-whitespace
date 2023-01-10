@@ -1,5 +1,8 @@
 """Using the OpenDP library to execute differentially private queries by Harvard"""
 
+from awsglue.utils import getResolvedOptions
+import botocore
+import boto3
 import os
 import sys
 import psutil
@@ -9,41 +12,19 @@ import numpy as np
 from tqdm import tqdm
 
 from opendp.typing import *
-# from opendp.mod import OpenDPException
-from opendp.mod import binary_search, binary_search_param, binary_search_chain
+from opendp.mod import binary_search_param
 from opendp.measurements import make_base_discrete_laplace, make_base_laplace
 from opendp.transformations import make_count, \
     make_clamp, \
-    make_cast, \
-    make_cast_default, \
-    make_impute_constant, \
     make_bounded_resize, \
     make_bounded_sum, \
-    make_select_column, \
-    make_split_dataframe, \
-    make_sized_bounded_sum, \
     make_sized_bounded_mean, \
     make_sized_bounded_variance
-
-# from commons.stats_vals import OPENDP
-# from commons.stats_vals import BASE_PATH, EPSILON_VALUES, MEAN, VARIANCE, COUNT, SUM
-# from commons.utils import save_synthetic_data_query_ouput, update_epsilon_values
-
 
 from opendp.mod import enable_features
 enable_features('contrib')
 enable_features("floating-point")
 
-
-import boto3
-import botocore
-from awsglue.utils import getResolvedOptions
-
-
-TUMULT_ANALYTICS = "TUMULT_ANALYTICS"
-OPENDP = "OPENDP"
-DIFFPRIVLIB = "DIFFPRIVLIB"
-PIPELINEDP = "PIPELINEDP"
 
 # queries to experiment
 MEAN = "MEAN"
@@ -116,7 +97,7 @@ def save_synthetic_data_query_output_aws(s3_path, lib_name, query, epsilon, file
     directory = f"s3://{s3_path}/{file_path}"
     output_path = directory + f"{query.lower()}.csv"
     output_file = f"{file_path}{query.lower()}.csv"
-    
+
     # check if file already exists in S3
     try:
         s3.Object(S3_DATA_BUCKET, output_file).load()
@@ -128,26 +109,22 @@ def save_synthetic_data_query_output_aws(s3_path, lib_name, query, epsilon, file
             df.to_csv(output_path, mode="a", header=True, index=False)
         else:
             raise
-    
+
     print(f"Saved results for epsilon: {epsilon}")
 
+    return out["mean_time_used"]
 
 
 #-----------#
 # Constants #
 #-----------#
-LIB_NAME = OPENDP
+LIB_NAME = "OPENDP"
 
 
-def run_opendp_query(query, epsilon_values, per_epsilon_iterations, data_path, column_name):
+def run_opendp_query(query, epsilon_values, per_epsilon_iterations, column_name, limiting_time_sec):
     """"""
 
-    # data_preprocessor = (
-    #     # Convert data into a dataframe where columns are of type Vec<str>
-    #     make_split_dataframe(separator=",", col_names=[column_name]) >>
-    #     # Selects a column of df, Vec<str>
-    #     make_select_column(key=column_name, TOA=float)
-    # )
+    count_exceeded_limit = 0
 
     #------------#
     # DATASETS   #
@@ -165,136 +142,140 @@ def run_opendp_query(query, epsilon_values, per_epsilon_iterations, data_path, c
                     print("#"*10)
                     print("Filename: ", filename)
                     print("#"*10)
-                    
+
                     if not filename.endswith(".csv"):
                         continue
-            
+
                     # dataset_path = os.path.join(data_path, filename)
                     # with open(dataset_path) as input_file:
                     #     data = input_file.read()
                     # data = data[len(column_name):]
-            
+
                     df = pd.read_csv(f"s3a://{S3_DATA_BUCKET}/{filename}")
                     data = df[column_name]
                     data_list = data.tolist()
-            
+
                     num_rows = data.count()
-            
+
                     # setup specific to the library
                     # the greatest number of records that any one individual can influence in the dataset
                     max_influence = 1
-            
+
                     #----------#
                     # Epsilons #
                     #----------#
                     for epsilon in epsilon_values:
-            
+
                         # metrics for `per_epsilon_iterations`
                         eps_time_used = []
                         eps_memory_used = []
                         eps_errors = []
                         eps_relative_errors = []
                         eps_scaled_errors = []
-            
+
                         #------------------------#
                         # Per epsilon iterations #
                         #------------------------#
                         for _ in tqdm(range(per_epsilon_iterations)):
-            
+
                             process = psutil.Process(os.getpid())
-            
+
                             #----------------------------------------#
                             # Compute differentially private queries #
                             #----------------------------------------#
                             if query == COUNT:
                                 begin_time = time.time()
-            
+
                                 compute_count = make_count(TIA=float)
-            
+
                                 discovered_scale = binary_search_param(
                                     lambda s: compute_count >> make_base_discrete_laplace(
                                         scale=s),
                                     d_in=max_influence,
                                     d_out=float(epsilon))
-            
+
                                 computation_chain = compute_count >> make_base_discrete_laplace(
                                     scale=discovered_scale)
-            
+
                                 private_value = computation_chain(data_list)
-            
+
                             else:
-            
+
                                 min_value = data.min()
                                 max_value = data.max()
-            
+
                                 if query == MEAN:
-            
+
                                     begin_time = time.time()
-            
+
                                     compute_bounded_mean = (
                                         make_clamp(bounds=(min_value, max_value)) >>
                                         make_bounded_resize(size=int(num_rows), bounds=(min_value, max_value), constant=0.) >>
                                         make_sized_bounded_mean(
                                             size=int(num_rows), bounds=(min_value, max_value))
                                     )
-            
+
                                     discovered_scale = binary_search_param(
                                         lambda s: compute_bounded_mean >> make_base_laplace(
                                             scale=s),
                                         d_in=max_influence,
                                         d_out=float(epsilon))
-            
+
                                     computation_chain = compute_bounded_mean >> make_base_laplace(
                                         scale=discovered_scale)
-            
-                                    private_value = computation_chain(data_list)
-            
+
+                                    private_value = computation_chain(
+                                        data_list)
+
                                 elif query == SUM:
                                     begin_time = time.time()
-            
+
                                     compute_bounded_sum = (
                                         make_clamp(bounds=(min_value, max_value)) >>
-                                        make_bounded_sum(bounds=(min_value, max_value))
+                                        make_bounded_sum(
+                                            bounds=(min_value, max_value))
                                     )
-            
+
                                     discovered_scale = binary_search_param(
                                         lambda s: compute_bounded_sum >> make_base_laplace(
                                             scale=s),
                                         d_in=max_influence,
                                         d_out=float(epsilon))
-            
+
                                     computation_chain = compute_bounded_sum >> make_base_laplace(
                                         scale=discovered_scale)
-            
-                                    private_value = computation_chain(data_list)
-            
+
+                                    private_value = computation_chain(
+                                        data_list)
+
                                 elif query == VARIANCE:
                                     begin_time = time.time()
-            
+
                                     compute_bounded_variance = (
                                         make_clamp(bounds=(min_value, max_value)) >>
                                         make_bounded_resize(size=int(num_rows), bounds=(min_value, max_value), constant=0.) >>
                                         make_sized_bounded_variance(
                                             size=int(num_rows), bounds=(min_value, max_value))
                                     )
-            
+
                                     discovered_scale = binary_search_param(
                                         lambda s: compute_bounded_variance >> make_base_laplace(
                                             scale=s),
                                         d_in=max_influence,
                                         d_out=float(epsilon))
-            
+
                                     computation_chain = compute_bounded_variance >> make_base_laplace(
                                         scale=discovered_scale)
-            
-                                    private_value = computation_chain(data_list)
-            
+
+                                    private_value = computation_chain(
+                                        data_list)
+
                             # compute execution time
                             eps_time_used.append(time.time() - begin_time)
-            
+
                             # compute memory usage
                             eps_memory_used.append(process.memory_info().rss)
-            
+
                             #---------------------#
                             # Compute true values #
                             #---------------------#
@@ -306,21 +287,27 @@ def run_opendp_query(query, epsilon_values, per_epsilon_iterations, data_path, c
                                 true_value = data.var()
                             elif query == COUNT:
                                 true_value = num_rows
-            
-                            # print("min_value: ", min_value)
-                            # print("max_value: ", max_value)
-                            print("true_value:", true_value)
-                            print("private_value:", private_value)
-            
+
+                            # print("true_value:", true_value)
+                            # print("private_value:", private_value)
+
                             # compute errors
                             error = abs(true_value - private_value)
-            
+
                             eps_errors.append(error)
                             eps_relative_errors.append(error/abs(true_value))
                             eps_scaled_errors.append(error/num_rows)
-            
-                        save_synthetic_data_query_output_aws(S3_DATA_BUCKET, LIB_NAME, query, epsilon, filename, eps_errors,
-                                                        eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
+
+                        mean_time_used = save_synthetic_data_query_output_aws(S3_DATA_BUCKET, LIB_NAME, query, epsilon, filename, eps_errors,
+                                                                              eps_relative_errors, eps_scaled_errors, eps_time_used, eps_memory_used)
+
+                        if mean_time_used >= limiting_time_sec:
+                            if count_exceeded_limit >= 5:
+                                print(
+                                    f"{LIB_NAME} | {filename}: Terminated process!! Last executed epsilon {epsilon} for {query} query.")
+                                sys.exit()
+                            else:
+                                count_exceeded_limit += 1
 
 
 if __name__ == "__main__":
@@ -345,6 +332,8 @@ if __name__ == "__main__":
     # for synthetic datasets the column name is fixed (will change for real-life datasets)
     column_name = "values"
 
+    limiting_time_sec = 0.5
+
     # number of iterations to run for each epsilon value
     # value should be in [100, 500]
     per_epsilon_iterations = int(args['opendp_iterations'])
@@ -353,7 +342,6 @@ if __name__ == "__main__":
 
     # get the epsilon values to resume with
     output_file = f"outputs/synthetic/{LIB_NAME.lower()}/size_{dataset_size}/{experimental_query.lower()}.csv"
-
 
     # check if file already exists in S3
     try:
@@ -364,8 +352,10 @@ if __name__ == "__main__":
         else:
             raise
     else:
-        epsilon_values = update_epsilon_values(f"s3://{S3_DATA_BUCKET}/{output_file}")
-        print(f"Epsilon value check before conducting experiment: {epsilon_values}")
+        epsilon_values = update_epsilon_values(
+            f"s3://{S3_DATA_BUCKET}/{output_file}")
+        print(
+            f"Epsilon value check before conducting experiment: {epsilon_values}")
 
     # test if all the epsilon values have NOT been experimented with
     if epsilon_values != -1:
@@ -376,6 +366,7 @@ if __name__ == "__main__":
         print("Dataset size: ", dataset_size)
         print("Dataset path: ", dataset_path)
         print("Epsilon Values: ", epsilon_values)
-        run_opendp_query(experimental_query, epsilon_values,per_epsilon_iterations, dataset_path, column_name)
+        run_opendp_query(experimental_query, epsilon_values,
+                         per_epsilon_iterations, column_name, limiting_time_sec)
     else:
         print("Experiment for these params were conducted before.")

@@ -79,6 +79,8 @@ def save_synthetic_data_query_ouput(lib_name, query, epsilon, filename, error, r
 
     print(f"Saved results for epsilon: {epsilon}")
 
+    return out["mean_time_used"]
+
 
 def save_synthetic_data_query_output_aws(s3_path, lib_name, query, epsilon, filename, error, relative_errors, scaled_errors, time_used, memory_used):
     """
